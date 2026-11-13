@@ -13,6 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
+ * Modified for H-SPAR (2026): optional water current input; added mass,
+ * Coriolis and drag act on the velocity relative to the water.
+ *
  */
 #ifndef VRX_SIMPLE_HYDRODYNAMICS_HH_
 #define VRX_SIMPLE_HYDRODYNAMICS_HH_
@@ -64,6 +67,12 @@ namespace vrx
   ///  * <mQ>    - Stability derivative, 1st order, pitch component [kg/m]
   ///  * <nRR>   - Stability derivative, 2nd order, yaw component [kg/m^2]
   ///  * <nR>    - Stability derivative, 1st order, yaw component [kg/m]
+  ///  * <current_topic> - Topic (gz.msgs.Vector3d) with the water current
+  ///     velocity at the link, world frame [m/s]. If set, added mass,
+  ///     Coriolis and drag use the velocity relative to the water,
+  ///     nu_r = nu - nu_c (Fossen). Without messages the current is zero.
+  ///  * <current_timeout> - Simulation time after the last current message
+  ///     before the current is reset to zero [s]. Default 2.0.
   ///
   /// # Example
   /// <plugin

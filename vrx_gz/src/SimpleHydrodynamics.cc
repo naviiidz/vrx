@@ -13,13 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
+ * Modified for H-SPAR (2026): optional water current input; added mass,
+ * Coriolis and drag act on the velocity relative to the water.
+ *
  */
 
+#include <chrono>
+#include <mutex>
 #include <string>
 #include <Eigen/Eigen>
 #include <gz/common/Profiler.hh>
 #include <gz/math/Vector3.hh>
+#include <gz/msgs/vector3d.pb.h>
 #include <gz/plugin/Register.hh>
+#include <gz/transport/Node.hh>
 #include <sdf/sdf.hh>
 
 #include "gz/sim/Link.hh"
@@ -96,7 +103,37 @@ class vrx::SimpleHydrodynamicsPrivate
   /// \brief Added mass of vehicle.
   /// See: https://en.wikipedia.org/wiki/Added_mass
   public: Eigen::MatrixXd Ma;
+
+  /// \brief Callback for the water current velocity.
+  public: void OnCurrent(const msgs::Vector3d &_msg);
+
+  /// \brief Transport node for the current subscription.
+  public: transport::Node node;
+
+  /// \brief Protects the current state below.
+  public: std::mutex currentMutex;
+
+  /// \brief Latest water current velocity, world frame.
+  public: math::Vector3d current{0, 0, 0};
+
+  /// \brief True when a current message arrived since the last PreUpdate.
+  public: bool currentReceived{false};
+
+  /// \brief Simulation time of the last current message.
+  public: std::chrono::steady_clock::duration lastCurrentTime{0};
+
+  /// \brief Time without messages before the current is reset to zero.
+  public: std::chrono::steady_clock::duration currentTimeout{
+    std::chrono::seconds(2)};
 };
+
+//////////////////////////////////////////////////
+void SimpleHydrodynamicsPrivate::OnCurrent(const msgs::Vector3d &_msg)
+{
+  std::lock_guard<std::mutex> lock(this->currentMutex);
+  this->current.Set(_msg.x(), _msg.y(), _msg.z());
+  this->currentReceived = true;
+}
 
 
 //////////////////////////////////////////////////
@@ -151,6 +188,22 @@ void SimpleHydrodynamics::Configure(const Entity &_entity,
   this->dataPtr->paramNr          = _sdf->Get<double>("nR",   20  ).first;
   this->dataPtr->paramNrr         = _sdf->Get<double>("nRR",   0  ).first;
 
+  std::string currentTopic;
+  if (_sdf->HasElement("current_topic"))
+  {
+    currentTopic = _sdf->Get<std::string>("current_topic");
+    this->dataPtr->currentTimeout =
+      std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+        std::chrono::duration<double>(
+          _sdf->Get<double>("current_timeout", 2.0).first));
+    if (!this->dataPtr->node.Subscribe(currentTopic,
+          &SimpleHydrodynamicsPrivate::OnCurrent, this->dataPtr.get()))
+    {
+      gzerr << "Error subscribing to topic [" << currentTopic << "]"
+            << std::endl;
+    }
+  }
+
   // Added mass according to Fossen's equations (p 37).
   this->dataPtr->Ma = Eigen::MatrixXd::Zero(6, 6);
 
@@ -182,6 +235,7 @@ void SimpleHydrodynamics::Configure(const Entity &_entity,
   gzdbg << "  <mQQ>: "       << this->dataPtr->paramMqq   << std::endl;
   gzdbg << "  <nR>: "        << this->dataPtr->paramNr    << std::endl;
   gzdbg << "  <nRR>: "       << this->dataPtr->paramNrr   << std::endl;
+  gzdbg << "  <current_topic>: " << currentTopic           << std::endl;
 }
 
 //////////////////////////////////////////////////
@@ -239,6 +293,25 @@ void SimpleHydrodynamics::PreUpdate(
   auto localLinearVel    = comPose->Rot().Inverse() * (*worldLinearVel);
   auto localAngularAccel = comPose->Rot().Inverse() * (*worldAngularAccel);
   auto localLinearAccel  = comPose->Rot().Inverse() * (*worldLinearAccel);
+
+  // Velocity relative to the water, nu_r = nu - nu_c (Fossen). The current
+  // is irrotational and slowly varying, so only the linear velocity changes.
+  math::Vector3d current;
+  {
+    std::lock_guard<std::mutex> lock(this->dataPtr->currentMutex);
+    if (this->dataPtr->currentReceived)
+    {
+      this->dataPtr->lastCurrentTime = _info.simTime;
+      this->dataPtr->currentReceived = false;
+    }
+    else if (_info.simTime - this->dataPtr->lastCurrentTime >
+             this->dataPtr->currentTimeout)
+    {
+      this->dataPtr->current = math::Vector3d::Zero;
+    }
+    current = this->dataPtr->current;
+  }
+  localLinearVel = comPose->Rot().Inverse() * (*worldLinearVel - current);
 
   stateDot << localLinearAccel.X(), localLinearAccel.Y(), localLinearAccel.Z(),
    localAngularAccel.X(), localAngularAccel.Y(), localAngularAccel.Z();

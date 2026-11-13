@@ -57,6 +57,9 @@
         <mQQ>900.0</mQQ>
         <nR>800.0</nR>
         <nRR>800.0</nRR>
+        <!-- Added for H-SPAR (2026): water current velocity (world frame). Damping acts on the velocity
+             relative to the water; with no publisher the current is zero. -->
+        <current_topic>/${namespace}/water_current</current_topic>
       </plugin>
 
     </gazebo>
