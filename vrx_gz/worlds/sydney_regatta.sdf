@@ -600,7 +600,12 @@
       <topic_wind_direction>/vrx/debug/wind/direction</topic_wind_direction>
     </plugin>
 
-    <!-- The wave field -->
+    <!-- Modified for H-SPAR (2026).
+         The wave field. Sea state 1 (calm): about 0.05 m peak-to-trough.
+         gain scales the Pierson-Moskowitz spectrum (not a height); with
+         period 8 s the three components sum to 0.05 m at gain 0.026.
+         direction is the propagation angle [rad]; steepness 0 gives sine
+         waves. The message is protobuf text, so no comments inside it. -->
     <plugin filename="libPublisherPlugin.so" name="vrx::PublisherPlugin">
       <message type="gz.msgs.Param" topic="/vrx/wavefield/parameters"
                every="2.0">
@@ -608,21 +613,21 @@
           key: "direction"
           value {
             type: DOUBLE
-            double_value: 0.0
+            double_value: 1.57
           }
         }
         params {
           key: "gain"
           value {
             type: DOUBLE
-            double_value: 0.3
+            double_value: 0.026
           }
         }
         params {
           key: "period"
           value {
             type: DOUBLE
-            double_value: 5
+            double_value: 8.0
           }
         }
         params {
