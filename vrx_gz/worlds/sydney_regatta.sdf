@@ -604,6 +604,7 @@
          The wave field. Sea state 1 (calm): about 0.05 m peak-to-trough.
          gain scales the Pierson-Moskowitz spectrum (not a height); with
          period 8 s the three components sum to 0.05 m at gain 0.026.
+         Gain is 0 for now: flat water.
          direction is the propagation angle [rad]; steepness 0 gives sine
          waves. The message is protobuf text, so no comments inside it. -->
     <plugin filename="libPublisherPlugin.so" name="vrx::PublisherPlugin">
@@ -620,7 +621,7 @@
           key: "gain"
           value {
             type: DOUBLE
-            double_value: 0.026
+            double_value: 0.0
           }
         }
         params {
